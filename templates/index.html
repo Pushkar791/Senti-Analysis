@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Sentiment Analysis</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loader"></div>
+        <p>Initializing Sentiment Analysis...</p>
+    </div>
+
+    <header class="header">
+        <div class="container">
+            <h1><i class="fas fa-brain"></i> Real-time Sentiment Analyzer</h1>
+            <div class="status-indicators">
+                <div id="connection-status" class="status-indicator">
+                    <i class="fas fa-circle"></i>
+                    <span>Connecting...</span>
+                </div>
+                <div id="model-status" class="status-indicator">
+                    <i class="fas fa-robot"></i>
+                    <span>Loading Models...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="input-card">
+                    <h2><i class="fas fa-edit"></i> Analyze Text</h2>
+                    <form id="sentiment-form">
+                        <div class="form-group">
+                            <label for="review-text">Enter your review or text:</label>
+                            <textarea 
+                                id="review-text" 
+                                placeholder="Enter your product review, feedback, or any text to analyze sentiment..."
+                                rows="4"
+                                maxlength="10000"
+                                required
+                            ></textarea>
+                            <div class="char-counter">
+                                <span id="char-count">0</span>/10000 characters
+                            </div>
+                        </div>
+                        
+                        <div class="button-group">
+                            <button type="submit" id="analyze-btn" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Analyze Sentiment
+                            </button>
+                            <button type="button" id="clear-btn" class="btn btn-secondary">
+                                <i class="fas fa-eraser"></i> Clear
+                            </button>
+                            <button type="button" id="sample-btn" class="btn btn-outline">
+                                <i class="fas fa-lightbulb"></i> Try Sample
+                            </button>
+                        </div>
+
+                        <!-- Real-time toggle -->
+                        <div class="form-options">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="realtime-toggle" checked>
+                                <span class="checkmark"></span>
+                                Real-time analysis (WebSocket)
+                            </label>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <div class="results-grid">
+                    <!-- Main Result -->
+                    <div class="result-card main-result">
+                        <h3><i class="fas fa-chart-line"></i> Analysis Result</h3>
+                        <div id="main-result-content">
+                            <div class="sentiment-display">
+                                <div id="sentiment-icon" class="sentiment-icon"></div>
+                                <div class="sentiment-info">
+                                    <h4 id="sentiment-label">Analyzing...</h4>
+                                    <div class="confidence-bar">
+                                        <div id="confidence-fill" class="confidence-fill"></div>
+                                    </div>
+                                    <span id="confidence-text">Confidence: 0%</span>
+                                </div>
+                            </div>
+                            
+                            <div class="metrics-grid">
+                                <div class="metric">
+                                    <i class="fas fa-clock"></i>
+                                    <span>Processing Time</span>
+                                    <strong id="processing-time">-</strong>
+                                </div>
+                                <div class="metric">
+                                    <i class="fas fa-font"></i>
+                                    <span>Words</span>
+                                    <strong id="word-count">-</strong>
+                                </div>
+                                <div class="metric">
+                                    <i class="fas fa-paragraph"></i>
+                                    <span>Sentences</span>
+                                    <strong id="sentence-count">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Model Comparison -->
+                    <div class="result-card">
+                        <h3><i class="fas fa-balance-scale"></i> Model Comparison</h3>
+                        <div id="model-comparison" class="model-comparison">
+                            <div class="model-result">
+                                <h4>VADER (Fast)</h4>
+                                <div id="vader-result" class="model-details">
+                                    <span class="sentiment-badge" id="vader-sentiment">-</span>
+                                    <span class="confidence" id="vader-confidence">-</span>
+                                </div>
+                            </div>
+                            <div class="model-result">
+                                <h4>Transformer (Accurate)</h4>
+                                <div id="transformer-result" class="model-details">
+                                    <span class="sentiment-badge" id="transformer-sentiment">-</span>
+                                    <span class="confidence" id="transformer-confidence">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Emotions Analysis -->
+                    <div class="result-card">
+                        <h3><i class="fas fa-heart"></i> Emotion Indicators</h3>
+                        <div id="emotions-chart" class="chart-container">
+                            <canvas id="emotions-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Analysis -->
+                <div class="detailed-analysis">
+                    <div class="result-card">
+                        <h3><i class="fas fa-info-circle"></i> Detailed Analysis</h3>
+                        <div class="analysis-tabs">
+                            <button class="tab-btn active" onclick="showTab('vader-details')">VADER Scores</button>
+                            <button class="tab-btn" onclick="showTab('text-metrics')">Text Metrics</button>
+                            <button class="tab-btn" onclick="showTab('raw-data')">Raw Data</button>
+                        </div>
+                        
+                        <div id="vader-details" class="tab-content active">
+                            <div class="score-breakdown">
+                                <div class="score-item">
+                                    <span>Positive:</span>
+                                    <div class="score-bar positive">
+                                        <div id="pos-score-fill"></div>
+                                    </div>
+                                    <span id="pos-score">0</span>
+                                </div>
+                                <div class="score-item">
+                                    <span>Neutral:</span>
+                                    <div class="score-bar neutral">
+                                        <div id="neu-score-fill"></div>
+                                    </div>
+                                    <span id="neu-score">0</span>
+                                </div>
+                                <div class="score-item">
+                                    <span>Negative:</span>
+                                    <div class="score-bar negative">
+                                        <div id="neg-score-fill"></div>
+                                    </div>
+                                    <span id="neg-score">0</span>
+                                </div>
+                                <div class="score-item">
+                                    <span>Compound:</span>
+                                    <div class="score-bar compound">
+                                        <div id="compound-score-fill"></div>
+                                    </div>
+                                    <span id="compound-score">0</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="text-metrics" class="tab-content">
+                            <div id="text-metrics-content"></div>
+                        </div>
+                        
+                        <div id="raw-data" class="tab-content">
+                            <pre id="raw-data-content"></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Analytics Dashboard -->
+            <section class="analytics-section">
+                <h2><i class="fas fa-analytics"></i> Analytics Dashboard</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="fas fa-comments stat-icon"></i>
+                        <div class="stat-info">
+                            <h3 id="total-reviews">0</h3>
+                            <p>Total Reviews</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-calendar-day stat-icon"></i>
+                        <div class="stat-info">
+                            <h3 id="today-reviews">0</h3>
+                            <p>Today's Reviews</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-percentage stat-icon"></i>
+                        <div class="stat-info">
+                            <h3 id="avg-confidence">0%</h3>
+                            <p>Avg. Confidence</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-users stat-icon"></i>
+                        <div class="stat-info">
+                            <h3 id="active-users">0</h3>
+                            <p>Active Users</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3><i class="fas fa-pie-chart"></i> Sentiment Distribution</h3>
+                        <div id="sentiment-pie-chart" class="chart-container">
+                            <canvas id="sentiment-pie"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-card">
+                        <h3><i class="fas fa-chart-area"></i> Sentiment Trends</h3>
+                        <div id="sentiment-trends-chart" class="chart-container">
+                            <!-- Plotly chart will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recent Reviews -->
+            <section class="recent-reviews-section">
+                <h2><i class="fas fa-history"></i> Recent Analyses</h2>
+                <div class="reviews-container">
+                    <div id="recent-reviews-list"></div>
+                    <button id="load-more-reviews" class="btn btn-outline">
+                        <i class="fas fa-plus"></i> Load More
+                    </button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Error Modal -->
+    <div id="error-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Error</h3>
+                <button class="close-btn" onclick="closeErrorModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="error-message"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeErrorModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/app-vercel.js"></script>
+</body>
+</html>
