@@ -26,7 +26,8 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "includeFiles": "{backend,templates}/**"
+      "excludeFiles": "**/*",
+      "includeFiles": "{api/index.py,backend/**/*.py,templates/**}"
     }
   }
 }
