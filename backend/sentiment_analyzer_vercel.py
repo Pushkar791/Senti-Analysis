@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from typing import Dict, List, Tuple
-import numpy as np
 from datetime import datetime
 import re
 
@@ -88,10 +87,12 @@ class AdvancedSentimentAnalyzer:
         words = text.split()
         sentences = text.split('.')
         
+        # Compute average word length without numpy to keep dependencies light
+        avg_word_length = (sum(len(word) for word in words) / len(words)) if words else 0
         return {
             'word_count': len(words),
             'sentence_count': len([s for s in sentences if s.strip()]),
-            'avg_word_length': np.mean([len(word) for word in words]) if words else 0,
+            'avg_word_length': avg_word_length,
             'exclamation_count': text.count('!'),
             'question_count': text.count('?'),
             'caps_ratio': sum(1 for c in text if c.isupper()) / len(text) if text else 0
