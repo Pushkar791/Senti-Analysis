@@ -25,10 +25,8 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "includeFiles": [
-        "backend/**",
-        "templates/**"
-      ]
+      "runtime": "python3.11",
+      "includeFiles": "{backend,templates}/**"
     }
   }
 }
