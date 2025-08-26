@@ -80,14 +80,23 @@ class SentimentApp {
 
     // Debounce function for real-time analysis
     debounceAnalyze = this.debounce((text) => {
+        // Don't analyze if text is empty or too short
+        if (!text || text.trim().length === 0) {
+            this.setAnalyzeButtonState(false);
+            return;
+        }
+        
         if (text.trim().length > 10) {
             this.analyzeText(text, true);
+        } else {
+            // Reset button state if text is too short
+            this.setAnalyzeButtonState(false);
         }
     }, 1500);
 
     debounce(func, wait) {
         let timeout;
-        return function executedFunction(...args) {
+        const debounced = function executedFunction(...args) {
             const later = () => {
                 clearTimeout(timeout);
                 func(...args);
@@ -95,6 +104,13 @@ class SentimentApp {
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);
         };
+        
+        // Add cancel method
+        debounced.cancel = function() {
+            clearTimeout(timeout);
+        };
+        
+        return debounced;
     }
 
     async handleSubmit() {
@@ -104,10 +120,16 @@ class SentimentApp {
             return;
         }
 
-        await this.analyzeText(text, false);
+        await this.analyzeText(text);
     }
 
     async analyzeText(text, isRealtime = false) {
+        // Don't analyze empty text
+        if (!text || text.trim().length === 0) {
+            this.setAnalyzeButtonState(false);
+            return;
+        }
+        
         if (this.isAnalyzing && !isRealtime) return;
         
         this.isAnalyzing = true;
@@ -211,9 +233,58 @@ class SentimentApp {
             }, 100);
         }
         
+        // Update confidence text
         if (this.confidenceText) {
             this.confidenceText.textContent = `Confidence: ${Math.round(confidence * 100)}%`;
         }
+    }
+
+    // Method for WebSocket to call
+    updateAnalyticsSummary(data) {
+        if (!data) return;
+        
+        // Update stats cards
+        if (data.total_reviews !== undefined) {
+            const totalReviews = document.getElementById('total-reviews');
+            if (totalReviews) totalReviews.textContent = data.total_reviews;
+        }
+        
+        if (data.reviews_today !== undefined) {
+            const todayReviews = document.getElementById('today-reviews');
+            if (todayReviews) todayReviews.textContent = data.reviews_today;
+        }
+        
+        if (data.average_confidence !== undefined) {
+            const avgConfidence = document.getElementById('avg-confidence');
+            if (avgConfidence) avgConfidence.textContent = `${Math.round(data.average_confidence * 100)}%`;
+        }
+        
+        if (data.active_users !== undefined) {
+            const activeUsers = document.getElementById('active-users');
+            if (activeUsers) activeUsers.textContent = data.active_users;
+        }
+        
+        // Update charts if available
+        if (window.chartManager && data.sentiment_distribution) {
+            window.chartManager.createSentimentPieChart(data.sentiment_distribution);
+        }
+    }
+
+    // Method for WebSocket to call
+    addToRecentReviews(reviewData) {
+        this.recentReviews.unshift({
+            text: reviewData.text_preview,
+            sentiment: reviewData.sentiment,
+            confidence: reviewData.confidence,
+            timestamp: reviewData.timestamp
+        });
+        
+        // Keep only latest 50 reviews
+        if (this.recentReviews.length > 50) {
+            this.recentReviews = this.recentReviews.slice(0, 50);
+        }
+        
+        this.displayRecentReviews();
     }
 
     updateMetrics(result) {
@@ -356,30 +427,39 @@ class SentimentApp {
         }
     }
 
-    updateCharCount() {
-        if (!this.textArea || !this.charCount) return;
-        
-        const length = this.textArea.value.length;
-        this.charCount.textContent = length;
-        
-        // Change color based on length
-        if (length > 8000) {
-            this.charCount.style.color = '#ef4444';
-        } else if (length > 6000) {
-            this.charCount.style.color = '#f59e0b';
-        } else {
-            this.charCount.style.color = '#94a3b8';
-        }
-    }
-
     clearForm() {
         if (this.textArea) {
             this.textArea.value = '';
             this.updateCharCount();
         }
         
+        // Reset analyzing state
+        this.isAnalyzing = false;
+        this.setAnalyzeButtonState(false);
+        
+        // Hide results section
         if (this.resultsSection) {
             this.resultsSection.style.display = 'none';
+        }
+        
+        // Clear any ongoing real-time analysis
+        if (this.debounceAnalyze && this.debounceAnalyze.cancel) {
+            this.debounceAnalyze.cancel();
+        }
+        
+        this.showToast('Cleared', 'Form cleared successfully', 'info');
+    }
+
+    updateCharCount() {
+        if (this.charCount && this.textArea) {
+            const count = this.textArea.value.length;
+            this.charCount.textContent = count;
+            
+            // Reset analyzing state if text is cleared
+            if (count === 0) {
+                this.isAnalyzing = false;
+                this.setAnalyzeButtonState(false);
+            }
         }
     }
 
@@ -403,13 +483,29 @@ class SentimentApp {
     async loadInitialData() {
         try {
             // Load recent reviews
-            const response = await fetch('/api/recent-reviews?limit=20');
-            const data = await response.json();
+            const reviewsResponse = await fetch('/api/recent-reviews?limit=20');
+            const reviewsData = await reviewsResponse.json();
             
-            if (data.reviews) {
-                this.recentReviews = data.reviews;
+            if (reviewsData.reviews) {
+                this.recentReviews = reviewsData.reviews;
                 this.displayRecentReviews();
             }
+            
+            // Load analytics data for charts
+            const analyticsResponse = await fetch('/api/analytics');
+            const analyticsData = await analyticsResponse.json();
+            
+            if (analyticsData.summary) {
+                this.updateAnalyticsSummary(analyticsData.summary);
+            }
+            
+            // Load trends data for trends chart
+            if (analyticsData.trends) {
+                if (window.chartManager) {
+                    window.chartManager.updateTrendsChart(analyticsData.trends);
+                }
+            }
+            
         } catch (error) {
             console.error('Error loading initial data:', error);
         }

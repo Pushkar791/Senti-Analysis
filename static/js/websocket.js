@@ -181,17 +181,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set up WebSocket event listeners
     wsManager.on('initial_data', (data) => {
         console.log('Received initial data:', data.data);
-        updateAnalyticsSummary(data.data);
+        if (window.sentimentApp) {
+            window.sentimentApp.updateAnalyticsSummary(data.data);
+        }
     });
     
     wsManager.on('analysis_result', (data) => {
         console.log('Received analysis result:', data.data);
-        displayAnalysisResult(data.data);
-        
-        // Update UI to show results
-        const resultsSection = document.getElementById('results-section');
-        if (resultsSection) {
-            resultsSection.style.display = 'block';
+        if (window.sentimentApp) {
+            window.sentimentApp.displayAnalysisResult(data.data);
         }
     });
     
@@ -199,7 +197,9 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('New analysis broadcast:', data.data);
         
         // Add to recent reviews list
-        addToRecentReviews(data.data);
+        if (window.sentimentApp) {
+            window.sentimentApp.addToRecentReviews(data.data);
+        }
         
         // Show notification
         wsManager.showToast('New Analysis', `${data.data.sentiment.toUpperCase()} sentiment detected`, 'info');
@@ -210,7 +210,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     wsManager.on('analytics_update', (data) => {
         console.log('Analytics updated:', data.data);
-        updateAnalyticsSummary(data.data);
+        if (window.sentimentApp) {
+            window.sentimentApp.updateAnalyticsSummary(data.data);
+        }
     });
     
     wsManager.on('connected', () => {

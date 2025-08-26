@@ -14,6 +14,7 @@ from pathlib import Path
 
 from sentiment_analyzer_vercel import AdvancedSentimentAnalyzer
 from database import SentimentDatabase
+from suggestion_engine import SuggestionEngine
 
 # Configure logging
 logging.basicConfig(
@@ -49,6 +50,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # Initialize components
 analyzer = AdvancedSentimentAnalyzer()
 db = SentimentDatabase()
+suggestion_engine = SuggestionEngine(db)
 
 # Pydantic models
 class SentimentRequest(BaseModel):
@@ -58,6 +60,10 @@ class SentimentRequest(BaseModel):
 class BatchSentimentRequest(BaseModel):
     texts: List[str]
     save_to_db: bool = True
+
+class SuggestionStatusRequest(BaseModel):
+    status: str
+    notes: str = None
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -292,13 +298,131 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(websocket)
 
+# Suggestion API Endpoints
+
+@app.post("/api/suggestions/generate")
+async def generate_suggestions(days: int = 30, background_tasks: BackgroundTasks = None):
+    """Generate new suggestions based on sentiment analysis"""
+    try:
+        # Analyze sentiment patterns
+        analysis = await suggestion_engine.analyze_sentiment_patterns(days)
+        
+        # Generate suggestions
+        suggestions = await suggestion_engine.generate_suggestions(analysis, days)
+        
+        # Save suggestions to database in background
+        if suggestions and background_tasks:
+            background_tasks.add_task(db.save_suggestions, suggestions)
+            
+            # Broadcast new suggestions to WebSocket clients
+            broadcast_message = {
+                'type': 'new_suggestions',
+                'data': {
+                    'count': len(suggestions),
+                    'high_priority': len([s for s in suggestions if s.get('priority') == 'high']),
+                    'timestamp': datetime.now().isoformat()
+                }
+            }
+            background_tasks.add_task(manager.broadcast, json.dumps(broadcast_message))
+        
+        return {
+            'suggestions': suggestions,
+            'analysis_summary': {
+                'satisfaction_score': analysis.get('satisfaction_score', {}),
+                'sentiment_trend': analysis.get('sentiment_trend', {}),
+                'common_issues': analysis.get('common_issues', {})
+            },
+            'generated_at': datetime.now().isoformat(),
+            'analysis_period_days': days
+        }
+    except Exception as e:
+        logger.error(f"Error generating suggestions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/suggestions")
+async def get_suggestions(status: str = None, category: str = None, limit: int = 50):
+    """Get suggestions with optional filtering"""
+    try:
+        suggestions = await db.get_suggestions(status=status, category=category, limit=limit)
+        return {
+            'suggestions': suggestions,
+            'count': len(suggestions),
+            'filters': {
+                'status': status,
+                'category': category,
+                'limit': limit
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting suggestions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/suggestions/{suggestion_id}/status")
+async def update_suggestion_status(suggestion_id: str, request: SuggestionStatusRequest, req: Request):
+    """Update the status of a suggestion"""
+    try:
+        client_ip = req.client.host
+        success = await db.update_suggestion_status(
+            suggestion_id, 
+            request.status, 
+            request.notes,
+            client_ip
+        )
+        
+        if success:
+            return {
+                'success': True,
+                'message': f'Suggestion status updated to {request.status}',
+                'suggestion_id': suggestion_id,
+                'new_status': request.status
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Suggestion not found")
+            
+    except Exception as e:
+        logger.error(f"Error updating suggestion status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/suggestions/stats")
+async def get_suggestion_stats():
+    """Get suggestion statistics and analytics"""
+    try:
+        stats = await db.get_suggestion_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting suggestion stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/suggestions/categories")
+async def get_suggestion_categories():
+    """Get available suggestion categories and their descriptions"""
+    return {
+        'categories': suggestion_engine.suggestion_categories,
+        'total_categories': len(suggestion_engine.suggestion_categories)
+    }
+
+@app.delete("/api/suggestions/cleanup")
+async def cleanup_old_suggestions(days: int = 90):
+    """Clean up old suggestions (admin endpoint)"""
+    try:
+        deleted_count = await db.delete_old_suggestions(days)
+        return {
+            'success': True,
+            'deleted_count': deleted_count,
+            'cleanup_period_days': days
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up suggestions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
     return {
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
-        'active_websockets': len(manager.active_connections)
+        'active_websockets': len(manager.active_connections),
+        'suggestion_engine_ready': suggestion_engine is not None
     }
 
 # Startup event

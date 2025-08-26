@@ -26,28 +26,6 @@ A comprehensive, real-time sentiment analysis system that combines multiple NLP 
 - Node.js (for development, optional)
 - Modern web browser
 
-### Installation
-
-1. **Clone the Repository**
-   ```bash
-   git clone <your-repo-url>
-   cd SEnt-Tracker
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Run the Application**
-   ```bash
-   cd backend
-   python main.py
-   ```
-
-4. **Access the Application**
-   Open your browser and navigate to: `http://localhost:8000`
-
 ## 📁 Project Structure
 
 ```
@@ -260,10 +238,6 @@ pip install transformers --no-cache-dir
 3. Make your changes
 4. Add tests if applicable
 5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License. See LICENSE file for details.
 
 ## 🎉 Key Improvements Over Previous Version
 
